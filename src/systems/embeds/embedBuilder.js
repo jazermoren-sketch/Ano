@@ -1,4 +1,13 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, ModalBuilder } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ModalBuilder,
+} = require('discord.js');
 const { saveEmbed, getEmbed } = require('./embedStore');
 
 function buildEmbed(payload = {}) {
@@ -12,24 +21,81 @@ function buildEmbed(payload = {}) {
   if (payload.footer) embed.setFooter({ text: String(payload.footer).slice(0, 2048) });
   if (payload.author) embed.setAuthor({ name: String(payload.author).slice(0, 256) });
   if (payload.timestamp) embed.setTimestamp();
-  if (Array.isArray(payload.fields)) embed.addFields(payload.fields.slice(0, 25).map(f => ({ name: String(f.name).slice(0, 256), value: String(f.value).slice(0, 1024), inline: Boolean(f.inline) })));
+  if (Array.isArray(payload.fields)) {
+    embed.addFields(payload.fields.slice(0, 25).map((field) => ({
+      name: String(field.name).slice(0, 256),
+      value: String(field.value).slice(0, 1024),
+      inline: Boolean(field.inline),
+    })));
+  }
   return embed;
 }
 
 function buildComponents(payload = {}) {
   const rows = [];
-  if (Array.isArray(payload.buttons) && payload.buttons.length) rows.push(new ActionRowBuilder().addComponents(payload.buttons.slice(0, 5).map(b => new ButtonBuilder().setCustomId(String(b.customId)).setLabel(String(b.label).slice(0, 80)).setStyle(b.style || ButtonStyle.Primary))));
-  if (Array.isArray(payload.selectOptions) && payload.selectOptions.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(String(payload.selectCustomId || 'ano_embed_select')).setPlaceholder(String(payload.placeholder || 'Select an option')).addOptions(payload.selectOptions.slice(0, 25).map(o => ({ label: String(o.label).slice(0, 100), value: String(o.value).slice(0, 100), description: o.description ? String(o.description).slice(0, 100) : undefined }))));
+
+  if (Array.isArray(payload.buttons) && payload.buttons.length) {
+    const buttons = payload.buttons.slice(0, 5).map((button) => (
+      new ButtonBuilder()
+        .setCustomId(String(button.customId))
+        .setLabel(String(button.label).slice(0, 80))
+        .setStyle(button.style || ButtonStyle.Primary)
+    ));
+    rows.push(new ActionRowBuilder().addComponents(buttons));
+  }
+
+  if (Array.isArray(payload.selectOptions) && payload.selectOptions.length) {
+    const options = payload.selectOptions.slice(0, 25).map((option) => ({
+      label: String(option.label).slice(0, 100),
+      value: String(option.value).slice(0, 100),
+      ...(option.description ? { description: String(option.description).slice(0, 100) } : {}),
+    }));
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(String(payload.selectCustomId || 'ano_embed_select'))
+      .setPlaceholder(String(payload.placeholder || 'Select an option').slice(0, 150))
+      .addOptions(options);
+
+    rows.push(new ActionRowBuilder().addComponents(select));
+  }
+
   return rows.slice(0, 5);
 }
 
 function buildModal(customId = 'ano_embed_modal', title = 'Embed Editor', fields = []) {
-  const modal = new ModalBuilder().setCustomId(customId).setTitle(String(title).slice(0, 45));
-  modal.addComponents(...fields.slice(0, 5).map(f => new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(String(f.customId)).setLabel(String(f.label).slice(0, 45)).setStyle(f.style === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short).setRequired(f.required !== false).setValue(f.value ? String(f.value).slice(0, 4000) : ''))));
+  const modal = new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(String(title).slice(0, 45));
+
+  modal.addComponents(...fields.slice(0, 5).map((field) => (
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId(String(field.customId))
+        .setLabel(String(field.label).slice(0, 45))
+        .setStyle(field.style === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+        .setRequired(field.required !== false)
+        .setValue(field.value ? String(field.value).slice(0, 4000) : '')
+    )
+  )));
+
   return modal;
 }
 
-function saveBuiltEmbed(guildId, name, payload) { return saveEmbed(guildId, name, payload); }
-function loadBuiltEmbed(guildId, name) { const data = getEmbed(guildId, name); return data ? { ...data, embed: buildEmbed(data.payload), components: buildComponents(data.payload) } : null; }
+function saveBuiltEmbed(guildId, name, payload) {
+  return saveEmbed(guildId, name, payload);
+}
 
-module.exports = { buildEmbed, buildComponents, buildModal, saveBuiltEmbed, loadBuiltEmbed };
+function loadBuiltEmbed(guildId, name) {
+  const data = getEmbed(guildId, name);
+  return data
+    ? { ...data, embed: buildEmbed(data.payload), components: buildComponents(data.payload) }
+    : null;
+}
+
+module.exports = {
+  buildEmbed,
+  buildComponents,
+  buildModal,
+  saveBuiltEmbed,
+  loadBuiltEmbed,
+};
