@@ -1,4 +1,4 @@
-const savedEmbeds = new Map();
+const repository = require('../../database/embedRepository');
 
 function normalize(input = {}) {
   return {
@@ -10,18 +10,7 @@ function normalize(input = {}) {
     footer: input.footer ? String(input.footer).slice(0, 2048) : undefined,
   };
 }
-
-function saveEmbed(guildId, input) {
-  const embed = normalize(input);
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const list = savedEmbeds.get(guildId) || [];
-  list.push({ id, ...embed, createdAt: new Date().toISOString() });
-  savedEmbeds.set(guildId, list.slice(-50));
-  return list.at(-1);
-}
-
-function listEmbeds(guildId) { return savedEmbeds.get(guildId) || []; }
-
-function getEmbed(guildId, id) { return listEmbeds(guildId).find(x => x.id === id) || null; }
-
+function saveEmbed(guildId, input) { return repository.save(guildId, normalize(input)); }
+function listEmbeds(guildId) { return repository.list(guildId); }
+function getEmbed(guildId, id) { return repository.get(guildId, id); }
 module.exports = { normalize, saveEmbed, listEmbeds, getEmbed };
