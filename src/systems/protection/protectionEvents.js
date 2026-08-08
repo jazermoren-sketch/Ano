@@ -1,5 +1,6 @@
 const { AuditLogEvent, Events } = require('discord.js');
 const { recordAction, isProtectedMember, shouldPunish } = require('./antiNukeService');
+const { lockdownMember } = require('./antiNukeResponse');
 
 const monitored = new Map([
   [Events.ChannelCreate, AuditLogEvent.ChannelCreate],
@@ -27,7 +28,8 @@ function registerProtectionEvents(client, options = {}) {
       if (isProtectedMember(member)) return;
       const count = recordAction(guild.id, executor.id, event);
       if (!shouldPunish(count, options.limit || 5)) return;
-      if (options.onThreshold) await options.onThreshold({ guild, member, event, count });
+      if (options.onThreshold) return options.onThreshold({ guild, member, event, count });
+      await lockdownMember(member);
     });
   }
 }
