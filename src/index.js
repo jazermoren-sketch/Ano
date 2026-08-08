@@ -47,4 +47,9 @@ if (!process.env.DISCORD_TOKEN || !process.env.CLIENT_ID) {
   process.exit(1);
 }
 
+if (process.env.DASHBOARD_ENABLED !== 'false') {
+  const dashboardPort = Number(process.env.DASHBOARD_PORT || process.env.PORT || 3000);
+  dashboardApp.listen(dashboardPort, () => console.log(`[DASHBOARD] Listening on ${dashboardPort}`));
+}
+
 client.login(process.env.DISCORD_TOKEN);
