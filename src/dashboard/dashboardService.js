@@ -1,14 +1,14 @@
 const { getSettings: getTicketSettings } = require('../systems/tickets/ticketService');
-const { getSettings: getProtectionSettings } = require('../systems/protection/protectionService');
+const { getProtectionConfig } = require('../systems/protection/protectionConfigService');
 const { getLogSettings } = require('../systems/logs/logService');
-const { listBackups } = require('../systems/backups/backupService');
+const { listGuildBackups } = require('../systems/backup/backupService');
 
 function getServerDashboard(guildId) {
   return {
     tickets: getTicketSettings(guildId),
-    protection: getProtectionSettings(guildId),
+    protection: getProtectionConfig(guildId),
     logs: getLogSettings(guildId),
-    backups: listBackups(guildId),
+    backups: listGuildBackups(guildId),
   };
 }
 
