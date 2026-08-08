@@ -1,5 +1,6 @@
 const { AuditLogEvent, Events } = require('discord.js');
 const { protectFromAuditAction } = require('./protectionGuard');
+const { getProtectionSettings } = require('./protectionSettings');
 const { resolveTicketLogChannel } = require('../logs/ticketLogResolver');
 
 const monitored = new Map([
@@ -27,12 +28,14 @@ function registerProtectionEvents(client, options = {}) {
     client.on(event, async resource => {
       const guild = resource.guild;
       if (!guild) return;
-      const executor = await resolveExecutor(guild, config.audit, options.auditMaxAgeMs);
+      const settings = getProtectionSettings(guild.id);
+      if (!settings.enabled) return;
+      const executor = await resolveExecutor(guild, config.audit, settings.audit_max_age_ms);
       if (!executor || executor.bot) return;
       const result = await protectFromAuditAction(guild, executor.id, config.type, {
-        whitelist: options.whitelist || [],
-        limits: options.limits || {},
-        windowMs: options.windowMs || 10_000,
+        whitelist: settings.whitelist,
+        limits: settings.limits,
+        windowMs: settings.window_ms,
       });
       if (result.blocked) await sendProtectionLog(guild, config.type, executor.id, result.reason);
     });
