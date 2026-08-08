@@ -1,5 +1,6 @@
 const { PermissionFlagsBits, ChannelType } = require('discord.js');
 const ticketRepo = require('./ticketSqlRepository');
+const { createTranscript } = require('./ticketTranscript');
 
 async function createTicketChannel(interaction, data, options = {}) {
   const guild = interaction.guild;
@@ -16,10 +17,7 @@ async function createTicketChannel(interaction, data, options = {}) {
     const record = ticketRepo.createTicket({ id: channel.id, guildId: guild.id, channelId: channel.id, ownerId: interaction.user.id, type: data.type, subject: data.subject });
     await channel.send({ content: `🎫 <@${interaction.user.id}>\n**${data.subject}**\n${data.details}` });
     return { channel, record };
-  } catch (error) {
-    await channel.delete('Rollback: ticket database insert failed').catch(() => {});
-    throw error;
-  }
+  } catch (error) { await channel.delete('Rollback: ticket database insert failed').catch(() => {}); throw error; }
 }
 
 async function claimTicket(interaction, channel) {
@@ -33,14 +31,18 @@ async function closeTicket(interaction, channel) {
   if (!channel?.permissionOverwrites) throw new Error('Ticket channel not found.');
   const record = ticketRepo.closeTicket(channel.id);
   if (!record) throw new Error('Ticket is already closed or does not exist.');
+  let transcriptPath = null;
+  try { transcriptPath = await createTranscript(channel); } catch (_) {}
   await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { ViewChannel: false });
-  return interaction.reply({ content: '🔒 Ticket closed.', ephemeral: false });
+  return interaction.reply({ content: `🔒 Ticket closed.${transcriptPath ? `\n📄 Transcript: \`${transcriptPath}\`` : ''}`, ephemeral: false });
 }
 
 async function deleteTicket(interaction, channel) {
   const record = ticketRepo.getTicket(channel.id);
   if (!record) throw new Error('Ticket does not exist in the database.');
-  await interaction.reply({ content: '🗑️ Deleting ticket...', ephemeral: true });
+  let transcriptPath = null;
+  try { transcriptPath = await createTranscript(channel); } catch (_) {}
+  await interaction.reply({ content: `🗑️ Deleting ticket${transcriptPath ? ' — transcript saved.' : '...'}`, ephemeral: true });
   ticketRepo.deleteTicket(channel.id);
   return channel.delete('Ano ticket delete');
 }
