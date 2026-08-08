@@ -4,6 +4,7 @@ const { updateSettings: updateProtectionSettings } = require('../systems/protect
 const { setLogChannel, disableLogs } = require('../systems/logs/logService');
 const { upsertSettings: updateTicketSettings } = require('../systems/tickets/ticketService');
 const { createBackup, listBackups, deleteBackup } = require('../systems/backups/backupService');
+const { restoreBackup } = require('../systems/backups/restoreService');
 const protectionConfig = require('../systems/protection/protectionConfig');
 const embedService = require('../systems/embeds/embedService');
 const router = Router();
@@ -16,6 +17,7 @@ router.post('/servers/:guildId/tickets',(req,res)=>{const values={};for(const ke
 router.post('/servers/:guildId/backups',(req,res)=>res.json({ok:true,backup:createBackup(req.params.guildId,req.body.name||undefined)}));
 router.get('/servers/:guildId/backups',(req,res)=>res.json({ok:true,backups:listBackups(req.params.guildId)}));
 router.delete('/servers/:guildId/backups/:backupId',(req,res)=>{const ok=deleteBackup(req.params.guildId,req.params.backupId);return ok?res.json({ok:true}):res.status(404).json({ok:false,error:'Backup not found'})});
+router.post('/servers/:guildId/backups/:backupId/restore',(req,res)=>{const result=restoreBackup(req.params.guildId,req.params.backupId);return result.ok?res.json(result):res.status(404).json(result)});
 router.post('/servers/:guildId/embeds',(req,res)=>res.json({ok:true,embed:embedService.saveEmbed(req.params.guildId,req.body)}));
 router.get('/servers/:guildId/embeds',(req,res)=>res.json({ok:true,embeds:embedService.listEmbeds(req.params.guildId)}));
 module.exports=router;
