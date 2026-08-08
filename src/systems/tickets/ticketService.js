@@ -19,11 +19,27 @@ function ensureTicketTables() {
       channel_id TEXT NOT NULL UNIQUE,
       owner_id TEXT NOT NULL,
       claimed_by TEXT,
+      closed_by TEXT,
       status TEXT NOT NULL DEFAULT 'open',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       closed_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS ticket_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id INTEGER NOT NULL UNIQUE,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  // Safe migration for databases created by Phase 2.
+  const columns = db.prepare('PRAGMA table_info(tickets)').all().map((column) => column.name);
+  if (!columns.includes('closed_by')) {
+    db.prepare('ALTER TABLE tickets ADD COLUMN closed_by TEXT').run();
+  }
 }
 
 function getSettings(guildId) {
@@ -53,14 +69,7 @@ function upsertSettings(guildId, values = {}) {
       panel_message_id = excluded.panel_message_id,
       log_channel_id = excluded.log_channel_id,
       updated_at = CURRENT_TIMESTAMP
-  `).run(
-    guildId,
-    next.category_id,
-    next.support_role_id,
-    next.panel_channel_id,
-    next.panel_message_id,
-    next.log_channel_id,
-  );
+  `).run(guildId, next.category_id, next.support_role_id, next.panel_channel_id, next.panel_message_id, next.log_channel_id);
 
   return getSettings(guildId);
 }
@@ -77,57 +86,31 @@ async function createTicket(interaction) {
     LIMIT 1
   `).get(guild.id, ownerId);
 
-  if (existing) {
-    return { ok: false, reason: 'ALREADY_OPEN', channelId: existing.channel_id };
-  }
+  if (existing) return { ok: false, reason: 'ALREADY_OPEN', channelId: existing.channel_id };
 
+  const safeName = interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 70);
   const channel = await guild.channels.create({
-    name: `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 80) || `ticket-${ownerId.slice(-6)}`,
+    name: safeName ? `ticket-${safeName}` : `ticket-${ownerId.slice(-6)}`,
     type: ChannelType.GuildText,
     parent: settings?.category_id || undefined,
     permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-        deny: [PermissionFlagsBits.ViewChannel],
-      },
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       {
         id: ownerId,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.AttachFiles,
-        ],
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
       },
-      ...(settings?.support_role_id
-        ? [{
-            id: settings.support_role_id,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory,
-              PermissionFlagsBits.AttachFiles,
-            ],
-          }]
-        : []),
+      ...(settings?.support_role_id ? [{
+        id: settings.support_role_id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
+      }] : []),
       {
         id: guild.members.me.id,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.ManageChannels,
-          PermissionFlagsBits.ManageMessages,
-        ],
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages],
       },
     ],
   });
 
-  db.prepare(`
-    INSERT INTO tickets (guild_id, channel_id, owner_id)
-    VALUES (?, ?, ?)
-  `).run(guild.id, channel.id, ownerId);
-
+  db.prepare('INSERT INTO tickets (guild_id, channel_id, owner_id) VALUES (?, ?, ?)').run(guild.id, channel.id, ownerId);
   return { ok: true, channel };
 }
 
@@ -139,20 +122,35 @@ function getTicket(channelId) {
 function claimTicket(channelId, userId) {
   ensureTicketTables();
   const ticket = getTicket(channelId);
-  if (!ticket || ticket.status !== 'open') return null;
+  if (!ticket || ticket.status !== 'open' || ticket.owner_id === userId) return null;
   db.prepare('UPDATE tickets SET claimed_by = ? WHERE channel_id = ?').run(userId, channelId);
   return getTicket(channelId);
 }
 
-function closeTicket(channelId) {
+function closeTicket(channelId, closedBy) {
   ensureTicketTables();
   const ticket = getTicket(channelId);
   if (!ticket || ticket.status !== 'open') return null;
-  db.prepare(`
-    UPDATE tickets SET status = 'closed', closed_at = CURRENT_TIMESTAMP
-    WHERE channel_id = ?
-  `).run(channelId);
+  db.prepare(`UPDATE tickets SET status = 'closed', closed_by = ?, closed_at = CURRENT_TIMESTAMP WHERE channel_id = ?`).run(closedBy, channelId);
   return getTicket(channelId);
+}
+
+function saveRating(channelId, userId, rating) {
+  ensureTicketTables();
+  const ticket = getTicket(channelId);
+  if (!ticket || ticket.status !== 'closed') return { ok: false, reason: 'NOT_CLOSED' };
+  if (ticket.owner_id !== userId) return { ok: false, reason: 'NOT_OWNER' };
+  if (!ticket.closed_by || ticket.closed_by === ticket.owner_id) return { ok: false, reason: 'OWNER_CLOSED' };
+  if (db.prepare('SELECT id FROM ticket_ratings WHERE ticket_id = ?').get(ticket.id)) return { ok: false, reason: 'ALREADY_RATED' };
+
+  db.prepare('INSERT INTO ticket_ratings (ticket_id, guild_id, user_id, rating) VALUES (?, ?, ?, ?)').run(ticket.id, ticket.guild_id, userId, rating);
+  return { ok: true };
+}
+
+function getTicketRating(channelId) {
+  ensureTicketTables();
+  const ticket = getTicket(channelId);
+  return ticket ? db.prepare('SELECT * FROM ticket_ratings WHERE ticket_id = ?').get(ticket.id) : null;
 }
 
 module.exports = {
@@ -163,4 +161,6 @@ module.exports = {
   getTicket,
   claimTicket,
   closeTicket,
+  saveRating,
+  getTicketRating,
 };
