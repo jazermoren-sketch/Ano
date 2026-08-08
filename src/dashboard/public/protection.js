@@ -19,19 +19,17 @@ async function save() {
     .filter(x => /^\d{17,20}$/.test(x))
     .slice(0, 100);
 
-  const limits = {
-    channelDelete: 3,
-    roleDelete: 3,
-    ban: 5,
-    kick: 5,
-  };
-
   const result = await request(`/api/servers/${guildId}/protection`, {
-    enabled: $('#antiNuke').checked || $('#antiRaid').checked,
+    enabled: $('#protectionEnabled').checked,
     whitelist,
-    limits,
-    windowMs: Math.max(1000, Number($('#raidLimit').dataset.windowMs || 10000)),
-    auditMaxAgeMs: 15000,
+    limits: {
+      channelDelete: 3,
+      roleDelete: 3,
+      ban: 5,
+      kick: 5,
+    },
+    windowMs: Math.max(1000, Number($('#protectionWindow').value) || 10000),
+    auditMaxAgeMs: Math.max(1000, Number($('#auditMaxAge').value) || 15000),
   });
 
   $('#protectionStatus').textContent = result.ok ? 'Protection settings saved.' : 'Protection settings were not saved.';
