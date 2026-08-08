@@ -7,11 +7,14 @@ const required = [
   'src/index.js',
   'src/dashboard/app.js',
   'src/dashboard/routes.js',
-  'src/systems/backups/backupService.js',
-  'src/systems/backups/restoreService.js',
-  'src/systems/embeds/embedService.js',
-  'src/systems/protection/antiNukeService.js',
-  'src/systems/protection/antiRaidService.js',
+  'src/dashboard/embedController.js',
+  'src/systems/backup/backupService.js',
+  'src/systems/backup/restoreService.js',
+  'src/systems/embeds/embedStore.js',
+  'src/systems/embeds/embedBuilder.js',
+  'src/systems/protection/protectionSettings.js',
+  'src/systems/protection/protectionConfigService.js',
+  'src/systems/protection/protectionEvents.js',
 ];
 
 let failed = false;
